@@ -175,8 +175,8 @@ class GaussianPuff:
             wind_speeds,
             wind_directions,
             puff_dt,
-            simulation_start,
-            simulation_end,
+            self.sim_start,
+            self.sim_end,
             self.n_obs,
         )
 
