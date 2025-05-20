@@ -127,44 +127,22 @@ def _check_wind_data(ws, skip_low_wind):
         )
 
 
-def _check_array_dtypes(
-    wind_speeds,
-    wind_directions,
-    source_coordinates,
-    emission_rates,
-    grid_coordinates,
-    sensor_coordinates,
-):
-    variables = {
-        "wind_speeds": wind_speeds,
-        "wind_directions": wind_directions,
-        "source_coordinates": source_coordinates,
-        "emission_rates": emission_rates,
-        "grid_coordinates": grid_coordinates,
-        "sensor_coordinates": sensor_coordinates,
-    }
-
+def _check_array_dtypes(**kwargs):
     casted_arrays = {}
 
-    for name, var in variables.items():
+    for name, var in kwargs.items():
         if var is not None:
             try:
                 casted_arrays[name] = np.asarray(var, dtype=float)
             except Exception as e:
                 raise ValueError(
-                    f"[fGP] Error: Failed to cast '{name}' to a NumPy float array: {e}. Try using an array dtype."
+                    f"[fGP] Error: Failed to cast '{name}' to a NumPy float array: {e}. "
+                    f"Try using an array-like with numeric dtype."
                 )
         else:
             casted_arrays[name] = None
 
-    return (
-        casted_arrays["wind_speeds"],
-        casted_arrays["wind_directions"],
-        casted_arrays["source_coordinates"],
-        casted_arrays["emission_rates"],
-        casted_arrays["grid_coordinates"],
-        casted_arrays["sensor_coordinates"],
-    )
+    return casted_arrays
 
 
 def _check_timestep_parameters(sim_dt, puff_dt, out_dt):

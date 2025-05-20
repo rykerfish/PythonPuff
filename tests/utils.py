@@ -24,4 +24,4 @@ params = {
 
 grid_params = {"nx":51, "ny":51, "nz":11, "grid_coordinates":np.array([0, 0, 0, 50, 50, 10])}
 
-sensor_params = {"sensor_coordinates" : np.array([[5, 5, 5], [16, 19, 4], [47, 4, 1]]), "using_sensors":True}
+sensor_params = {"sensor_coordinates": np.array([[5, 5, 5], [16, 19, 4], [47, 4, 1]])}

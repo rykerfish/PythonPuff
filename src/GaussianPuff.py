@@ -11,8 +11,74 @@ from FastGaussianPuff import interface_helpers as ih
 from abc import abstractmethod
 
 
-class GaussianPuff:
+"""
+Inputs:
+    obs_dt [s] (scalar, double):
+        time interval (dt) for the observations
+        NOTE: must be larger than sim_dt. This should be the resolution of the wind data.
+    sim_dt [s] (scalar, double):
+        time interval (dt) for the simulation results
+    puff_dt [s] (scalar, double):
+        time interval (dt) between two successive puffs' creation
+        NOTE: must also be a positive integer multiple of sim_dt, e.g. puff_dt = n*sim_dt for integer n > 0
+    output_dt [s] (scalar, double):
+        resolution to resample the concentration to at the end of the sismulation. By default,
+        resamples to the resolution of the wind observations obs_dt.
+    simulation_start, simulation_end (pd.DateTime values)
+        start and end times for the emission to be simulated. Must be timezone-aware.
+    time_zone (timezone string):
+        timezone to use for the simulation. This should be a string that can be parsed by
+        the zoneinfo module, e.g. "America/New_York".
+    source_coordinates (array, size=(n_sources, 3)) [m]:
+        holds source coordinate (x0,y0,z0) in meters for each source.
+    emission_rates: (array, length=n_sources) [kg/hr]:
+        rate that each source is emitting at in kg/hr.
+    wind_speeds [m/s] (list of floats):
+        wind speed at each time stamp, in obs_dt resolution
+    wind_directions [degree] (list of floats):
+        wind direction at each time stamp, in obs_dt resolution.
+        follows the conventional definition:
+        0 -> wind blowing from North, 90 -> E, 180 -> S, 270 -> W
+    using_sensors (boolean):
+        If True, ignores grid-related input parameters and only simulates at sensor coordinates.
+        True inputs:
+            - sensor_coordinates
+        False inputs:
+            - grid_coordinates,
+            - nx, ny, nz
+    sensor_coordinates: (array, size=(n_sensors, 3)) [m]
+        coordinates of the sensors in (x,y,z) format.
+    grid_coordinates: (array, length=6) [m]
+        holds the coordinates for the corners of the rectangular grid to be created.
+        format is grid_coordinates=[min_x, min_y, min_z, max_x, max_y, max_z]
+    nx, ny, ny (scalar, int):
+        Number of points for the grid the x, y, and z directions
+    puff_duration (double) [seconds] :
+        how many seconds a puff can 'live'; we assume a puff will fade away after a certain time.
+        Depending on the grid size wind speed, this parameter will never come into play as the simulation
+        for the puff stops when the plume has moved far away. In low wind speeds, however, this cutoff will
+        halt the simulation of a puff early. This may be desirable as exceedingly long (and likely unphysical)
+        plume departure times can be computed for wind speeds << 1 m/s
+    skip_low_wind (boolean), low_wind_cutoff [m/s] (float):
+        if True, the simulation will skip any time step where the wind speed is below low_wind_cutoff.
+        This is useful to avoid zero-values or situations where the wind is so slow that it'd create unreasonable predictions.
+        Default is False.
+    exp_threshold_tolerance (scalar, float):
+        the tolerance used to threshold the exponentials when evaluating the Gaussian equation.
+        If, for example, exp_tol = 1e-9, the concentration at a single point for an individual time step
+        will have error less than 1e-9. Upsampling to different time resolutions may introduce extra error.
+        Default is 1e-7, which passess all safe-mode tests with less than 0.1% error.
+    conversion_factor (scalar, float):
+        convert from kg/m^3 to ppm, this factor is for ch4 only
+    unsafe (boolean):
+        if True, will use unsafe evaluations for some operations. This mode is faster but introduces some
+        error. If you're unsure about results, set to False and compare error between the two methods.
+    quiet (boolean):
+        if True, outputs extra information about the simulation and its progress.
+"""
 
+
+class GaussianPuff:
     def __init__(
         self,
         obs_dt,
@@ -21,17 +87,14 @@ class GaussianPuff:
         simulation_start,
         simulation_end,
         time_zone,
+        X,
+        Y,
+        Z,
         source_coordinates,
         emission_rates,
         wind_speeds,
         wind_directions,
         output_dt=None,
-        using_sensors=False,
-        sensor_coordinates=None,
-        grid_coordinates=None,
-        nx=None,
-        ny=None,
-        nz=None,
         puff_duration=1200,
         skip_low_wind=False,
         low_wind_cutoff=-1,
@@ -40,92 +103,69 @@ class GaussianPuff:
         unsafe=False,
         quiet=True,
     ):
-        """
-        Inputs:
-            obs_dt [s] (scalar, double):
-                time interval (dt) for the observations
-                NOTE: must be larger than sim_dt. This should be the resolution of the wind data.
-            sim_dt [s] (scalar, double):
-                time interval (dt) for the simulation results
-            puff_dt [s] (scalar, double):
-                time interval (dt) between two successive puffs' creation
-                NOTE: must also be a positive integer multiple of sim_dt, e.g. puff_dt = n*sim_dt for integer n > 0
-            output_dt [s] (scalar, double):
-                resolution to resample the concentration to at the end of the sismulation. By default,
-                resamples to the resolution of the wind observations obs_dt.
-            simulation_start, simulation_end (pd.DateTime values)
-                start and end times for the emission to be simulated. Must be timezone-aware.
-            time_zone (timezone string):
-                timezone to use for the simulation. This should be a string that can be parsed by
-                the zoneinfo module, e.g. "America/New_York".
-            source_coordinates (array, size=(n_sources, 3)) [m]:
-                holds source coordinate (x0,y0,z0) in meters for each source.
-            emission_rates: (array, length=n_sources) [kg/hr]:
-                rate that each source is emitting at in kg/hr.
-            wind_speeds [m/s] (list of floats):
-                wind speed at each time stamp, in obs_dt resolution
-            wind_directions [degree] (list of floats):
-                wind direction at each time stamp, in obs_dt resolution.
-                follows the conventional definition:
-                0 -> wind blowing from North, 90 -> E, 180 -> S, 270 -> W
-            using_sensors (boolean):
-                If True, ignores grid-related input parameters and only simulates at sensor coordinates.
-                True inputs:
-                    - sensor_coordinates
-                False inputs:
-                    - grid_coordinates,
-                    - nx, ny, nz
-            sensor_coordinates: (array, size=(n_sensors, 3)) [m]
-                coordinates of the sensors in (x,y,z) format.
-            grid_coordinates: (array, length=6) [m]
-                holds the coordinates for the corners of the rectangular grid to be created.
-                format is grid_coordinates=[min_x, min_y, min_z, max_x, max_y, max_z]
-            nx, ny, ny (scalar, int):
-                Number of points for the grid the x, y, and z directions
-            puff_duration (double) [seconds] :
-                how many seconds a puff can 'live'; we assume a puff will fade away after a certain time.
-                Depending on the grid size wind speed, this parameter will never come into play as the simulation
-                for the puff stops when the plume has moved far away. In low wind speeds, however, this cutoff will
-                halt the simulation of a puff early. This may be desirable as exceedingly long (and likely unphysical)
-                plume departure times can be computed for wind speeds << 1 m/s
-            skip_low_wind (boolean), low_wind_cutoff [m/s] (float):
-                if True, the simulation will skip any time step where the wind speed is below low_wind_cutoff.
-                This is useful to avoid zero-values or situations where the wind is so slow that it'd create unreasonable predictions.
-                Default is False.
-            exp_threshold_tolerance (scalar, float):
-                the tolerance used to threshold the exponentials when evaluating the Gaussian equation.
-                If, for example, exp_tol = 1e-9, the concentration at a single point for an individual time step
-                will have error less than 1e-9. Upsampling to different time resolutions may introduce extra error.
-                Default is 1e-7, which passess all safe-mode tests with less than 0.1% error.
-            conversion_factor (scalar, float):
-                convert from kg/m^3 to ppm, this factor is for ch4 only
-            unsafe (boolean):
-                if True, will use unsafe evaluations for some operations. This mode is faster but introduces some
-                error. If you're unsure about results, set to False and compare error between the two methods.
-            quiet (boolean):
-               if True, outputs extra information about the simulation and its progress.
-        """
-
-        self.conversion_factor = conversion_factor
-        self.one_over_two_pi_three_halves = 1 / ((2 * math.pi) ** (3 / 2))
-
         ih._check_timestep_parameters(sim_dt, puff_dt, obs_dt)
-
         self.obs_dt = obs_dt
         self.sim_dt = sim_dt
         self.puff_dt = puff_dt
-        if output_dt is None:
-            self.out_dt = self.obs_dt
-        else:
-            self.out_dt = output_dt
+        self.output_dt = output_dt or obs_dt
 
         self.sim_start = ih._ensure_utc(simulation_start)
         self.sim_end = ih._ensure_utc(simulation_end)
+
+        ns = (self.sim_end - self.sim_start).total_seconds()
+        self.n_obs = (
+            math.floor(ns / obs_dt) + 1
+        )  # number of observed data points we have
 
         try:
             time_zone = ZoneInfo(time_zone)
         except ZoneInfoNotFoundError:
             raise ValueError(f"Invalid timezone: {time_zone}")
+        self.time_zone = time_zone
+
+        self.X = X
+        self.Y = Y
+        self.Z = Z
+        self.N_points = len(self.X)
+
+        result = ih._check_array_dtypes(
+            wind_speeds=wind_speeds,
+            wind_directions=wind_directions,
+            source_coordinates=source_coordinates,
+            emission_rates=emission_rates,
+        )
+        wind_speeds = result["wind_speeds"]
+        wind_directions = result["wind_directions"]
+        source_coordinates = result["source_coordinates"]
+        self.emission_rates = result["emission_rates"]
+
+        ih._check_wind_data(wind_speeds, skip_low_wind)
+        # resample the wind data from obs_dt to the simulation resolution sim_dt
+        self.ws, self.wd = ih._interpolate_wind_data(
+            wind_speeds,
+            wind_directions,
+            puff_dt,
+            self.sim_start,
+            self.sim_end,
+            self.n_obs,
+        )
+
+        self.source_coordinates = ih._parse_source_coords(source_coordinates)
+
+        # self.source_coordinates = source_coordinates
+        # self.emission_rates = emission_rates
+        # self.wind_speeds = wind_speeds
+        # self.wind_directions = wind_directions
+
+        self.puff_duration = puff_duration
+        self.skip_low_wind = skip_low_wind
+        self.low_wind_cutoff = low_wind_cutoff
+        self.exp_threshold_tolerance = exp_threshold_tolerance
+        self.conversion_factor = conversion_factor
+        self.unsafe = unsafe
+        self.quiet = quiet
+
+        self.one_over_two_pi_three_halves = 1 / ((2 * math.pi) ** (3 / 2))
 
         utc_total_time_series = pd.date_range(
             start=self.sim_start, end=self.sim_end, freq=f"{puff_dt}s", tz="UTC"
@@ -153,39 +193,12 @@ class GaussianPuff:
             self.skip_low_wind = True
             self.low_wind_thresh = low_wind_cutoff
 
-        ns = (self.sim_end - self.sim_start).total_seconds()
-        self.n_obs = (
-            math.floor(ns / obs_dt) + 1
-        )  # number of observed data points we have
-
-        arrays = ih._check_array_dtypes(
-            wind_speeds,
-            wind_directions,
-            source_coordinates,
-            emission_rates,
-            grid_coordinates,
-            sensor_coordinates,
-        )
-        (
-            wind_speeds,
-            wind_directions,
-            source_coordinates,
-            self.emission_rates,
-            grid_coordinates,
-            sensor_coordinates,
-        ) = arrays
-
-        ih._check_wind_data(wind_speeds, skip_low_wind)
-
-        # resample the wind data from obs_dt to the simulation resolution sim_dt
-        self.ws, self.wd = ih._interpolate_wind_data(
-            wind_speeds,
-            wind_directions,
-            puff_dt,
-            self.sim_start,
-            self.sim_end,
-            self.n_obs,
-        )
+        # (
+        #     wind_speeds,
+        #     wind_directions,
+        #     source_coordinates,
+        #     self.emission_rates,
+        # ) = arrays
 
         # save timeseries of simulation resolution so we can resample back to observation later
         self.time_stamps_sim = pd.date_range(
@@ -193,184 +206,59 @@ class GaussianPuff:
         )
         self.n_sim = len(self.time_stamps_sim)  # number of simulation time steps
 
-        self.source_coordinates = ih._parse_source_coords(source_coordinates)
-
         self.puff_duration = puff_duration
         if self.puff_duration == None:
             self.puff_duration = self.n_sim  # ensures we don't overflow time index
-
-        # creates grid
-        if not using_sensors:
-            self.using_sensors = False
-
-            self.nx = nx
-            self.ny = ny
-            self.nz = nz
-            self.N_points = self.nx * self.ny * self.nz
-
-            x_min = grid_coordinates[0]
-            y_min = grid_coordinates[1]
-            z_min = grid_coordinates[2]
-            x_max = grid_coordinates[3]
-            y_max = grid_coordinates[4]
-            z_max = grid_coordinates[5]
-
-            x, y, z = (
-                np.linspace(x_min, x_max, self.nx),
-                np.linspace(y_min, y_max, self.ny),
-                np.linspace(z_min, z_max, self.nz),
-            )
-
-            self.X, self.Y, self.Z = np.meshgrid(
-                x, y, z
-            )  # x-y-z grid across site in utm
-            self.grid_dims = np.shape(self.X)
-
-            # work with the flattened grids
-            self.X = self.X.ravel()
-            self.Y = self.Y.ravel()
-            self.Z = self.Z.ravel()
-
-            # constructor for the c code
-            spatial_grid = (self.X, self.Y, self.Z, self.nx, self.ny, self.nz)
-            dts = (sim_dt, puff_dt, puff_duration)
-            wind = (self.ws, self.wd)
-            # self.GPC = fGP.GridGaussianPuff(
-            #     *spatial_grid,
-            #     *dts,
-            #     self.n_puffs,
-            #     self.hours_arr,
-            #     *wind,
-            #     self.source_coordinates,
-            #     emission_rates,
-            #     conversion_factor,
-            #     self.exp_threshold_tol,
-            #     skip_low_wind,
-            #     low_wind_cutoff,
-            #     unsafe,
-            #     quiet,
-            # )
-            args = (
-                *spatial_grid,
-                *dts,
-                self.n_puffs,
-                self.hours_arr,
-                *wind,
-                self.source_coordinates,
-                emission_rates,
-                conversion_factor,
-                self.exp_threshold_tol,
-                skip_low_wind,
-                low_wind_cutoff,
-                unsafe,
-                quiet,
-            )
-            self.GPC = GridMode(*args)
-        else:
-            self.using_sensors = True
-            self.N_points = len(sensor_coordinates)
-
-            self.X, self.Y, self.Z = [], [], []
-            for sensor in sensor_coordinates:
-                self.X.append(sensor[0])
-                self.Y.append(sensor[1])
-                self.Z.append(sensor[2])
-
-            spatial_grid = (self.X, self.Y, self.Z, self.N_points)
-            dts = (sim_dt, puff_dt, puff_duration)
-            wind = (self.ws, self.wd)
-            spatial_grid = (self.X, self.Y, self.Z, self.N_points)
-            dts = (sim_dt, puff_dt, puff_duration)
-            wind = (self.ws, self.wd)
-            # self.GPC = fGP.SensorGaussianPuff(
-            #     *spatial_grid,
-            #     *dts,
-            #     self.n_puffs,
-            #     self.hours_arr,
-            #     *wind,
-            #     self.source_coordinates,
-            #     emission_rates,
-            #     conversion_factor,
-            #     self.exp_threshold_tol,
-            #     skip_low_wind,
-            #     low_wind_cutoff,
-            #     unsafe,
-            #     quiet,
-            # )
-
-            args = (
-                self.N_points,  # N_sensors first
-                self.X,
-                self.Y,
-                self.Z,  # then the rest (excluding N_points)
-                sim_dt,
-                puff_dt,
-                puff_duration,
-                self.n_puffs,
-                self.hours_arr,
-                self.ws,
-                self.wd,
-                self.source_coordinates,
-                emission_rates,
-                conversion_factor,
-                self.exp_threshold_tol,
-                skip_low_wind,
-                low_wind_cutoff,
-                unsafe,
-                quiet,
-            )
-
-            self.GPC = SensorMode(*args)
 
         # initialize the final simulated concentration array
         self.ch4_result = np.zeros(
             (self.n_sim, self.N_points)
         )  # simulation in sim_dt resolution, flattened
 
-    def _model_info_print(self):
-        """
-        Print the parameters used in this model
-        """
+    # def _model_info_print(self):
+    #     """
+    #     Print the parameters used in this model
+    #     """
 
-        print("\n************************************************************")
-        print("****************     PUFF SIMULATION START     *************")
-        print("************************************************************")
-        print(">>>>> start time: {}".format(datetime.datetime.now()))
-        print(">>>>> configuration;")
-        print("         Observation time resolution: {}[s]".format(self.obs_dt))
-        print("         Simulation time resolution: {}[s]".format(self.sim_dt))
-        print("         Puff creation time resolution: {}[s]".format(self.puff_dt))
-        if self.using_sensors:
-            print("         Running in sensor mode")
-        else:
-            print(
-                f"         Running in grid mode with grid dimensions {self.grid_dims}"
-            )
+    #     print("\n************************************************************")
+    #     print("****************     PUFF SIMULATION START     *************")
+    #     print("************************************************************")
+    #     print(">>>>> start time: {}".format(datetime.datetime.now()))
+    #     print(">>>>> configuration;")
+    #     print("         Observation time resolution: {}[s]".format(self.obs_dt))
+    #     print("         Simulation time resolution: {}[s]".format(self.sim_dt))
+    #     print("         Puff creation time resolution: {}[s]".format(self.puff_dt))
+    #     if self.using_sensors:
+    #         print("         Running in sensor mode")
+    #     else:
+    #         print(
+    #             f"         Running in grid mode with grid dimensions {self.grid_dims}"
+    #         )
+
+    # def simulate(self):
+    #     """
+    #     Main code for simulation
+    #     Outputs:
+    #         ch4_sim_res [ppm] (2-D np.array, shape = [N_t_obs, N_sensor]):
+    #             simulated concentrations resampled according to observation dt
+    #     """
+    #     # if self.quiet == False:
+    #     #     self._model_info_print()
+
+    #     # self.GPC.simulate(self.ch4_result)
+    #     # self.GPC.simulate_python()
+
+    #     # resample results to the output_dt-resolution
+    #     self.ch4_obs = self._resample_simulation(self.ch4_result, self.output_dt)
+
+    #     if self.quiet == False:
+    #         print("\n************************************************************")
+    #         print("*****************    PUFF SIMULATION END     ***************")
+    #         print("************************************************************")
+
+    #     return self.ch4_obs
 
     def simulate(self):
-        """
-        Main code for simulation
-        Outputs:
-            ch4_sim_res [ppm] (2-D np.array, shape = [N_t_obs, N_sensor]):
-                simulated concentrations resampled according to observation dt
-        """
-        if self.quiet == False:
-            self._model_info_print()
-
-        # self.GPC.simulate(self.ch4_result)
-        self.GPC.simulate_python()
-
-        # resample results to the output_dt-resolution
-        self.ch4_obs = self._resample_simulation(self.ch4_result, self.out_dt)
-
-        if self.quiet == False:
-            print("\n************************************************************")
-            print("*****************    PUFF SIMULATION END     ***************")
-            print("************************************************************")
-
-        return self.ch4_obs
-
-    def simulate_python(self):
         self.setSourceCoordinates(0)
         q = self.emission_rates[0] / 3600  # convert to kg/s
         emission_per_puff = q * self.puff_dt
@@ -400,6 +288,8 @@ class GaussianPuff:
             if not self.quiet and math.floor(self.n_puffs * report_ratio) == p:
                 print(f"Simulation is {int(report_ratio * 100)}% done")
                 report_ratio += 0.1
+
+        self.ch4_obs = self._resample_simulation(self.ch4_result, self.output_dt)
 
     def setSourceCoordinates(self, source_index):
 
@@ -570,6 +460,7 @@ class GaussianPuff:
         return corner
 
     def calculateExitLocation(self):
+        breakpoint()
         box_min = np.array([self.x_min, self.y_min])
         box_max = np.array([self.x_max, self.y_max])
         origin = np.array([0.0, 0.0])
@@ -776,69 +667,92 @@ class GaussianPuff:
 
 
 class GridMode(GaussianPuff):
-    def __init__(self, *args):
-        # Unpack args expected for this class
-        (
-            X,
-            Y,
-            Z,
-            nx,
-            ny,
-            nz,
-            sim_dt,
-            puff_dt,
-            puff_duration,
-            n_puffs,
-            hours,
-            wind_speeds,
-            wind_directions,
-            source_coordinates,
-            emission_strengths,
-            conversion_factor,
-            exp_tol,
-            skip_low_wind,
-            low_wind_thresh,
-            unsafe,
-            quiet,
-        ) = args
 
-        # Pass arguments to superclass constructor (assuming it takes the same order except flattening nx*ny*nz)
-        super().__init__(
-            X,
-            Y,
-            Z,
-            nx * ny * nz,
-            sim_dt,
-            puff_dt,
-            puff_duration,
-            n_puffs,
-            hours,
-            wind_speeds,
-            wind_directions,
-            source_coordinates,
-            emission_strengths,
-            conversion_factor,
-            exp_tol,
-            skip_low_wind,
-            low_wind_thresh,
-            unsafe,
-            quiet,
-        )
-
+    def __init__(
+        self,
+        obs_dt,
+        sim_dt,
+        puff_dt,
+        simulation_start,
+        simulation_end,
+        time_zone,
+        source_coordinates,
+        emission_rates,
+        wind_speeds,
+        wind_directions,
+        grid_coordinates,
+        nx,
+        ny,
+        nz,
+        output_dt=None,
+        puff_duration=1200,
+        skip_low_wind=False,
+        low_wind_cutoff=-1,
+        exp_threshold_tolerance=None,
+        conversion_factor=1e6 * 1.524,
+        unsafe=False,
+        quiet=True,
+    ):
         self.nx = nx
         self.ny = ny
         self.nz = nz
+        self.N_points = self.nx * self.ny * self.nz
 
-        self.computeGridSpacing()
+        result = ih._check_array_dtypes(grid_coordinates=grid_coordinates)
+        grid_coordinates = result["grid_coordinates"]
 
-        # Initialize 3D map_table as a list of lists of lists (ny x nx x nz)
+        x_min = grid_coordinates[0]
+        y_min = grid_coordinates[1]
+        z_min = grid_coordinates[2]
+        x_max = grid_coordinates[3]
+        y_max = grid_coordinates[4]
+        z_max = grid_coordinates[5]
+
+        x, y, z = (
+            np.linspace(x_min, x_max, self.nx),
+            np.linspace(y_min, y_max, self.ny),
+            np.linspace(z_min, z_max, self.nz),
+        )
+
+        X, Y, Z = np.meshgrid(x, y, z)  # x-y-z grid across site in utm
+        # self.grid_dims = np.shape(self.X)
+
+        # work with the flattened grids
+        X = X.ravel()
+        Y = Y.ravel()
+        Z = Z.ravel()
+
+        self.computeGridSpacing(X,Y,Z)
+
         self.map_table = np.empty((self.ny, self.nx, self.nz), dtype=int)
-
         for i in range(nx):
             for j in range(ny):
                 for k in range(nz):
-                    # maps 3d index to 1d raveled index in numpy 'ij' format meshgrids
                     self.map_table[j][i][k] = self.map(i, j, k)
+
+        super().__init__(
+            obs_dt=obs_dt,
+            sim_dt=sim_dt,
+            puff_dt=puff_dt,
+            simulation_start=simulation_start,
+            simulation_end=simulation_end,
+            time_zone=time_zone,
+            X=X,
+            Y=Y,
+            Z=Z,
+            source_coordinates=source_coordinates,
+            emission_rates=emission_rates,
+            wind_speeds=wind_speeds,
+            wind_directions=wind_directions,
+            output_dt=output_dt,
+            puff_duration=puff_duration,
+            skip_low_wind=skip_low_wind,
+            low_wind_cutoff=low_wind_cutoff,
+            exp_threshold_tolerance=exp_threshold_tolerance,
+            conversion_factor=conversion_factor,
+            unsafe=unsafe,
+            quiet=quiet,
+        )
 
     def map(self, i, j, k):
         return j * self.nz * self.nx + i * self.nz + k
@@ -920,16 +834,78 @@ class GridMode(GaussianPuff):
 
         return [i_lower, i_upper, j_lower, j_upper, k_lower, k_upper]
 
-    def computeGridSpacing(self):
-        self.dx = abs(self.X[self.nz] - self.X[0])  # dx
-        self.dy = abs(self.Y[self.nz * self.nx] - self.Y[0])  # dy
-        self.dz = abs(self.Z[1] - self.Z[0])  # dz
+    def computeGridSpacing(self,X,Y,Z):
+        self.dx = abs(X[self.nz] - X[0])  # dx
+        self.dy = abs(Y[self.nz * self.nx] - Y[0])  # dy
+        self.dz = abs(Z[1] - Z[0])  # dz
 
 
 class SensorMode(GaussianPuff):
-    def __init__(self, N_sensors, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.indices = np.arange(N_sensors)
+
+    def __init__(
+        self,
+        obs_dt,
+        sim_dt,
+        puff_dt,
+        simulation_start,
+        simulation_end,
+        time_zone,
+        source_coordinates,
+        emission_rates,
+        wind_speeds,
+        wind_directions,
+        sensor_coordinates,
+        output_dt=None,
+        puff_duration=1200,
+        skip_low_wind=False,
+        low_wind_cutoff=-1,
+        exp_threshold_tolerance=None,
+        conversion_factor=1e6 * 1.524,
+        unsafe=False,
+        quiet=True,
+    ):
+        self.using_sensors = True
+        N_points = len(sensor_coordinates)
+
+        result = ih._check_array_dtypes(sensor_coordinates=sensor_coordinates)
+        sensor_coordinates = result["sensor_coordinates"]
+
+        X, Y, Z = (
+            np.empty(N_points),
+            np.empty(N_points),
+            np.empty(N_points),
+        )
+        # for sensor in sensor_coordinates:
+        for i, sensor in enumerate(sensor_coordinates):
+            X[i] = sensor[0]
+            Y[i] = sensor[1]
+            Z[i] = sensor[2]
+
+        self.indices = np.arange(len(sensor_coordinates))
+
+        super().__init__(
+            obs_dt=obs_dt,
+            sim_dt=sim_dt,
+            puff_dt=puff_dt,
+            simulation_start=simulation_start,
+            simulation_end=simulation_end,
+            time_zone=time_zone,
+            X=X,
+            Y=Y,
+            Z=Z,
+            source_coordinates=source_coordinates,
+            emission_rates=emission_rates,
+            wind_speeds=wind_speeds,
+            wind_directions=wind_directions,
+            output_dt=output_dt,
+            puff_duration=puff_duration,
+            skip_low_wind=skip_low_wind,
+            low_wind_cutoff=low_wind_cutoff,
+            exp_threshold_tolerance=exp_threshold_tolerance,
+            conversion_factor=conversion_factor,
+            unsafe=unsafe,
+            quiet=quiet,
+        )
 
     # mostly a stub- could be used to implement a more efficient version
     def coarseSpatialThreshold(self, wind_shift, local_thresh, sigma_y_i, sigma_z_i):
