@@ -1,6 +1,6 @@
 import pytest
 from FastGaussianPuff import PuffParser as parser
-from FastGaussianPuff import GaussianPuff as GP
+from FastGaussianPuff import SensorMode
 import pandas as pd
 import numpy as np
 
@@ -40,7 +40,7 @@ def test_dlq_setup():
     end_time = end_time.tz_convert("UTC")
     tz = "America/Denver"
 
-    gp = GP(
+    gp = SensorMode(
         60,
         1.0,
         1.0,
@@ -52,7 +52,6 @@ def test_dlq_setup():
         ws,
         wd,
         output_dt=60,
-        using_sensors=True,
         sensor_coordinates=sensors,
     )
     gp.simulate()
@@ -64,7 +63,7 @@ def test_dlq_setup():
         assert np.linalg.norm(diff) < 1e-3
 
     source = [[488163.3384441765, 4493892.532058168, 5.447]]
-    gp = GP(
+    gp = SensorMode(
         60,
         1.0,
         1.0,
@@ -76,7 +75,6 @@ def test_dlq_setup():
         ws,
         wd,
         output_dt=60,
-        using_sensors=True,
         sensor_coordinates=sensors,
     )
     gp.simulate()
@@ -129,7 +127,7 @@ def test_multisource_setup():
 
     for i, source in enumerate(sources):
         print(source, rates[i])
-        gp = GP(
+        gp = SensorMode(
             60,
             1.0,
             1.0,
@@ -141,7 +139,6 @@ def test_multisource_setup():
             ws,
             wd,
             output_dt=60,
-            using_sensors=True,
             sensor_coordinates=sensors,
         )
         gp.simulate()
