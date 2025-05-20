@@ -13,13 +13,17 @@ def test_list_init():
     ws = [3]*61
     wd = [200]*61
 
+    test_params = params.copy()
+    test_grid_params = grid_params.copy()
+    test_sensor_params = sensor_params.copy()
+
     # this should still work if we pass lists instead of numpy arrays
-    params["wind_speeds"] = ws
-    params["wind_directions"] = wd
-    params["emission_rates"] = [3]
-    grid_params["grid_coordinates"] = [0, 0, 0, 50, 50, 10]
-    sensor_params["sensor_coordinates"] = [[5, 5, 5], [16, 19, 4], [47, 4, 1]]
-    params["source_coordinates"] = [[25, 25, 5]]
+    test_params["wind_speeds"] = ws
+    test_params["wind_directions"] = wd
+    test_params["emission_rates"] = [3]
+    test_grid_params["grid_coordinates"] = [0, 0, 0, 50, 50, 10]
+    test_sensor_params["sensor_coordinates"] = [[5, 5, 5], [16, 19, 4], [47, 4, 1]]
+    test_params["source_coordinates"] = [[25, 25, 5]]
 
     gp = GridMode(**params, **grid_params)
     sp = SensorMode(**params, **sensor_params)
