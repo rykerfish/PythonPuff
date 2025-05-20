@@ -1,5 +1,5 @@
 from .GaussianPuff import GaussianPuff
-from .parser import PuffParser
 from .GaussianPuff import GridMode, SensorMode
+from .parser import PuffParser
 
 __all__ = ['GaussianPuff']

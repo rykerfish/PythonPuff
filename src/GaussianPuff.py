@@ -215,26 +215,6 @@ class GaussianPuff:
             (self.n_sim, self.N_points)
         )  # simulation in sim_dt resolution, flattened
 
-    # def _model_info_print(self):
-    #     """
-    #     Print the parameters used in this model
-    #     """
-
-    #     print("\n************************************************************")
-    #     print("****************     PUFF SIMULATION START     *************")
-    #     print("************************************************************")
-    #     print(">>>>> start time: {}".format(datetime.datetime.now()))
-    #     print(">>>>> configuration;")
-    #     print("         Observation time resolution: {}[s]".format(self.obs_dt))
-    #     print("         Simulation time resolution: {}[s]".format(self.sim_dt))
-    #     print("         Puff creation time resolution: {}[s]".format(self.puff_dt))
-    #     if self.using_sensors:
-    #         print("         Running in sensor mode")
-    #     else:
-    #         print(
-    #             f"         Running in grid mode with grid dimensions {self.grid_dims}"
-    #         )
-
     # def simulate(self):
     #     """
     #     Main code for simulation
@@ -268,6 +248,7 @@ class GaussianPuff:
         puff_to_sim_ratio = round(self.puff_dt / self.sim_dt)
 
         for p in range(self.n_puffs):
+            print(f"puff {p} of {self.n_puffs}")
             if self.skip_low_wind and self.ws[p] < self.low_wind_thresh:
                 continue
 
@@ -306,8 +287,11 @@ class GaussianPuff:
         self.x_max = np.max(self.X) - self.x0
         self.y_max = np.max(self.Y) - self.y0
 
-    def windDirectionToAngle(self, direction):
-        return 0.0  # placeholder
+    def windDirectionToAngle(self, wd):
+        deg_to_rad_factor = np.pi / 180  # or use np.deg2rad(1)
+        theta = wd - 270
+        theta *= deg_to_rad_factor
+        return theta
 
     def concentrationPerPuff(self, q, theta, ws, hour, ch4_slice):
         self.cosine = math.cos(theta)  # Cache cosine and sine
@@ -460,7 +444,6 @@ class GaussianPuff:
         return corner
 
     def calculateExitLocation(self):
-        breakpoint()
         box_min = np.array([self.x_min, self.y_min])
         box_max = np.array([self.x_max, self.y_max])
         origin = np.array([0.0, 0.0])
@@ -475,8 +458,8 @@ class GaussianPuff:
         t0 = (boxMin - origin) * invRayDir
         t1 = (boxMax - origin) * invRayDir
 
-        tmax = np.minimum(t0, t1).min()
-        tmin = np.maximum(t0, t1).max()
+        tmax = np.maximum(t0, t1).min()
+        tmin = np.minimum(t0, t1).max()
 
         return np.array([tmin, tmax])
 
@@ -621,10 +604,7 @@ class GaussianPuff:
         for i in range(1, n_time_steps + 1):
             downwind_dists[i] = downwind_dists[i - 1] + shift_per_step
 
-        sigma_y = np.zeros(n_time_steps + 1)
-        sigma_z = np.zeros(n_time_steps + 1)
-
-        self.getSigmaCoefficients(stability_class, downwind_dists, n_time_steps)
+        sigma_y, sigma_z = self.getSigmaCoefficients(stability_class, downwind_dists, n_time_steps)
 
         return sigma_y, sigma_z
 

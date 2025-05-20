@@ -3,7 +3,7 @@ import numpy as np
 import ast
 import os
 
-from FastGaussianPuff import GaussianPuff as GP
+from FastGaussianPuff import SensorMode
 
 class PuffParser:
 
@@ -74,7 +74,7 @@ class PuffParser:
                 s_ind = exp_sources[j]
                 coords = [self.source_coords[s_ind]]
 
-                gp = GP(
+                gp = SensorMode(
                     self.wind_dt,
                     self.sim_dt,
                     self.puff_dt,
@@ -86,7 +86,6 @@ class PuffParser:
                     ws,
                     wd,
                     output_dt=self.output_dt,
-                    using_sensors=True,
                     sensor_coordinates=sensors,
                 )
                 gp.simulate()
@@ -98,7 +97,7 @@ class PuffParser:
             z = np.zeros((1, len(list(self.sensor_coords.keys()))))
             df_ch4 = pd.concat([pd.DataFrame(z, columns=list(self.sensor_coords.keys())), df_ch4], ignore_index=True)
 
-            gp_out_res = gp.out_dt # seconds
+            gp_out_res = gp.output_dt # seconds
             td = pd.Timedelta(gp_out_res, unit='seconds')
 
             time_series = pd.date_range(start_time, end_time + td, periods=gp.n_out + 1)
