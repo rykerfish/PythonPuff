@@ -2,7 +2,7 @@ import time
 import pandas as pd
 import numpy as np
 
-from FastGaussianPuff import GaussianPuff as GP
+from FastGaussianPuff import GridMode, SensorMode
 
 # source: 4T-11
 start_1 = '2022-02-22 01:33:22-07:00'
@@ -21,6 +21,8 @@ start_3 = '2022-04-27 03:49:09-06:00'
 end_3 = '2022-04-27 08:04:09-06:00'
 start_3 = pd.to_datetime(start_3, utc=True)
 end_3 = pd.to_datetime(end_3, utc=True)
+
+time_zone = "America/Denver"
 
 num_tests = 0
 tests_passed = 0
@@ -44,22 +46,29 @@ def runSensorTest(exp_start, t_0, t_end,
             emission_rate, puff_duration, 
             unsafe=False
             ):
-    
-    t_0 = t_0.tz_convert("America/Denver")
-    t_end = t_end.tz_convert("America/Denver")
+
+    # t_0 = t_0.tz_convert("America/Denver")
+    # t_end = t_end.tz_convert("America/Denver")
 
     # eps = 1e-7
     eps = 1e-10
 
-    sensor_puff = GP(obs_dt, sim_dt, puff_dt,
-                t_0, t_end,
-                source_coordinates, emission_rate,
-                wind_speeds, wind_directions, 
-                using_sensors=True,
-                sensor_coordinates=sensor_coordinates,
-                quiet=True,
-                puff_duration=puff_duration, unsafe=unsafe,
-                exp_threshold_tolerance=eps
+    sensor_puff = SensorMode(
+        obs_dt,
+        sim_dt,
+        puff_dt,
+        t_0,
+        t_end,
+        time_zone,
+        source_coordinates,
+        emission_rate,
+        wind_speeds,
+        wind_directions,
+        sensor_coordinates=sensor_coordinates,
+        quiet=True,
+        puff_duration=puff_duration,
+        unsafe=unsafe,
+        exp_threshold_tolerance=eps,
     )
 
     start = time.time()
@@ -74,7 +83,7 @@ def runSensorTest(exp_start, t_0, t_end,
     exp_start = str(exp_start)
     start_time_str = exp_start.replace(" ", "-").replace(":", "-")
     filename = test_data_dir + "ch4-sensor-n-" + str(sensor_puff.N_points) + "-sim-" + str(sim_dt) + "-puff-" + str(puff_dt) + "-exp-" + start_time_str + ".csv"
-    
+
     ch4_old = np.loadtxt(filename, delimiter=",")
     # np.savetxt(filename, ch4, delimiter=",")
     # return
@@ -88,28 +97,37 @@ def runTest(exp_start, t_0, t_end,
             source_coordinates, emission_rate, grid_coords, puff_duration,
             unsafe = False
             ):
-    
-    t_0 = t_0.tz_convert("America/Denver")
-    t_end = t_end.tz_convert("America/Denver")
-    
+
+    # t_0 = t_0.tz_convert("America/Denver")
+    # t_end = t_end.tz_convert("America/Denver")
+
     if unsafe:
         eps = 1e-5
     else:
         eps = 1e-10
 
-    t_0 = t_0.tz_localize(None)
-    t_end = t_end.tz_localize(None)
+    # t_0 = t_0.tz_localize(None)
+    # t_end = t_end.tz_localize(None)
 
-    grid_puff = GP(obs_dt, sim_dt, puff_dt,
-                t_0, t_end,
-                source_coordinates, emission_rate,
-                wind_speeds, wind_directions, 
-                grid_coordinates=grid_coords,
-                using_sensors=False,
-                nx=nx, ny=ny, nz=nz,
-                quiet=True, unsafe=unsafe,
-                puff_duration=puff_duration,
-                exp_threshold_tolerance=eps
+    grid_puff = GridMode(
+        obs_dt,
+        sim_dt,
+        puff_dt,
+        t_0,
+        t_end,
+        time_zone,
+        source_coordinates,
+        emission_rate,
+        wind_speeds,
+        wind_directions,
+        grid_coordinates=grid_coords,
+        nx=nx,
+        ny=ny,
+        nz=nz,
+        quiet=True,
+        unsafe=unsafe,
+        puff_duration=puff_duration,
+        exp_threshold_tolerance=eps,
     )
 
     start = time.time()

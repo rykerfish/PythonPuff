@@ -272,6 +272,8 @@ class GaussianPuff:
 
         self.ch4_obs = self._resample_simulation(self.ch4_result, self.output_dt)
 
+        return self.ch4_obs
+
     def setSourceCoordinates(self, source_index):
 
         self.x0 = self.source_coordinates[source_index, 0]
