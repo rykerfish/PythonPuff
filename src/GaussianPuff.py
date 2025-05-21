@@ -153,11 +153,6 @@ class GaussianPuff:
 
         self.source_coordinates = ih._parse_source_coords(source_coordinates)
 
-        # self.source_coordinates = source_coordinates
-        # self.emission_rates = emission_rates
-        # self.wind_speeds = wind_speeds
-        # self.wind_directions = wind_directions
-
         self.puff_duration = puff_duration
         self.skip_low_wind = skip_low_wind
         self.low_wind_cutoff = low_wind_cutoff
@@ -193,13 +188,6 @@ class GaussianPuff:
                 )
             self.skip_low_wind = True
             self.low_wind_thresh = low_wind_cutoff
-
-        # (
-        #     wind_speeds,
-        #     wind_directions,
-        #     source_coordinates,
-        #     self.emission_rates,
-        # ) = arrays
 
         # save timeseries of simulation resolution so we can resample back to observation later
         self.time_stamps_sim = pd.date_range(
@@ -249,7 +237,6 @@ class GaussianPuff:
         puff_to_sim_ratio = round(self.puff_dt / self.sim_dt)
 
         for p in range(self.n_puffs):
-            print(f"puff {p} of {self.n_puffs}")
             if self.skip_low_wind and self.ws[p] < self.low_wind_thresh:
                 continue
 
@@ -353,7 +340,7 @@ class GaussianPuff:
 
         prefactor = q * self.conversion_factor * self.one_over_two_pi_three_halves
 
-        for i in prange(1, n_time_steps + 1):
+        for i in range(1, n_time_steps + 1):
             one_over_sig_y = 1 / sigma_y[i]
             one_over_sig_z = 1 / sigma_z[i]
             local_prefactor = prefactor * one_over_sig_y**2 * one_over_sig_z
@@ -371,7 +358,7 @@ class GaussianPuff:
 
             gaussian_puff_inner_loop(
                 ch4,
-                np.array(indices),  # make sure this is an array for numba
+                indices,
                 i,
                 sigma_y[i],
                 sigma_z[i],
@@ -598,7 +585,7 @@ class GaussianPuff:
 
     @abstractmethod
     def coarseSpatialThreshold(self, wind_shift, local_thresh, sigma_y_i, sigma_z_i):
-        return np.array([])
+        return np.array([], dtype=np.int32)
 
     def exp(self, val):
         return math.exp(val)
@@ -730,7 +717,7 @@ class GridMode(GaussianPuff):
         indices = self.getValidIndices(
             self.thresh_xy_max, self.thresh_z_max, wind_shift
         )
-        return indices
+        return indices.astype(np.int32)
 
     def getValidIndices(self, thresh_xy, thresh_z, wind_shift):
         index_bounds = self.computeIndexBounds(thresh_xy, thresh_z, wind_shift)
@@ -754,13 +741,6 @@ class GridMode(GaussianPuff):
 
         if i_upper < i_lower or j_upper < j_lower or k_upper < k_lower:
             return np.array([])
-
-        i_count = i_upper - i_lower + 1
-        j_count = j_upper - j_lower + 1
-        k_count = k_upper - k_lower + 1
-
-        cell_count = i_count * j_count * k_count
-        indices = np.empty(cell_count, dtype=int)
 
         # Slice the map_table to get the sub-block
         sub_block = self.map_table[
@@ -849,7 +829,7 @@ class SensorMode(GaussianPuff):
             Y[i] = sensor[1]
             Z[i] = sensor[2]
 
-        self.indices = np.arange(len(sensor_coordinates))
+        self.indices = np.arange(len(sensor_coordinates), dtype=np.int32)
 
         super().__init__(
             obs_dt=obs_dt,
