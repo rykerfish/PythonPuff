@@ -1,14 +1,9 @@
 # create the environment from this file with `conda env create -f conda_env.yml`
-name: gp
+name: pygp
 channels:
   - conda-forge
 dependencies:
-  - pybind11
   - pandas
   - numpy
-  - matplotlib
-  - pytest
-  - cxx-compiler
-  - make
-  - cmake
-  - eigen
+  - numba
+  - tbb>=2021.6
