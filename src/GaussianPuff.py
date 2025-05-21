@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import numpy as np
 import pandas as pd
+from numba import njit, prange
 
 from FastGaussianPuff import CGaussianPuff as fGP
 from FastGaussianPuff import interface_helpers as ih
@@ -352,7 +353,7 @@ class GaussianPuff:
 
         prefactor = q * self.conversion_factor * self.one_over_two_pi_three_halves
 
-        for i in range(1, n_time_steps + 1):
+        for i in prange(1, n_time_steps + 1):
             one_over_sig_y = 1 / sigma_y[i]
             one_over_sig_z = 1 / sigma_z[i]
             local_prefactor = prefactor * one_over_sig_y**2 * one_over_sig_z
@@ -368,36 +369,21 @@ class GaussianPuff:
                 wind_shift, local_thresh, sigma_y[i], sigma_z[i]
             )
 
-            for j in indices:
-                if sigma_y[i] <= 0 or sigma_z[i] <= 0:
-                    continue
-
-                t_xy = sigma_y[i] * local_thresh
-
-                if abs(self.X_centered[j] - x_shift) >= t_xy:
-                    continue
-                if abs(self.Y_centered[j] - y_shift) >= t_xy:
-                    continue
-
-                t_z = sigma_z[i] * local_thresh
-                if abs(self.Z[j] - self.z0) >= t_z:
-                    continue
-
-                y_dist = self.Y_centered[j] - y_shift
-                x_dist = self.X_centered[j] - x_shift
-                z_minus_by_sig = (self.Z[j] - self.z0) * one_over_sig_z
-                z_plus_by_sig = (self.Z[j] + self.z0) * one_over_sig_z
-
-                one_over_sig_y_sq = one_over_sig_y**2
-                term_3_arg = (y_dist**2 + x_dist**2) * one_over_sig_y_sq
-                term_4_a_arg = z_minus_by_sig**2
-                term_4_b_arg = z_plus_by_sig**2
-
-                term_4 = np.exp(-0.5 * (term_3_arg + term_4_a_arg)) + self.exp(
-                    -0.5 * (term_3_arg + term_4_b_arg)
-                )
-
-                ch4[i, j] += local_prefactor * term_4
+            gaussian_puff_inner_loop(
+                ch4,
+                np.array(indices),  # make sure this is an array for numba
+                i,
+                sigma_y[i],
+                sigma_z[i],
+                x_shift,
+                y_shift,
+                self.z0,
+                self.X_centered,
+                self.Y_centered,
+                self.Z,
+                self.exp_threshold_tol,
+                local_prefactor,
+            )
 
     def calculatePlumeTravelTime(self, threshXY, windSpeed):
         boxMin = np.array([-threshXY, -threshXY])
@@ -776,13 +762,13 @@ class GridMode(GaussianPuff):
         cell_count = i_count * j_count * k_count
         indices = np.empty(cell_count, dtype=int)
 
-        current_cell = 0
-        for i in range(i_lower, i_upper + 1):
-            for j in range(j_lower, j_upper + 1):
-                for k in range(k_lower, k_upper + 1):
-                    indices[current_cell] = self.map_table[j, i, k]
-                    current_cell += 1
+        # Slice the map_table to get the sub-block
+        sub_block = self.map_table[
+            j_lower : j_upper + 1, i_lower : i_upper + 1, k_lower : k_upper + 1
+        ]
 
+        # Flatten it into 1D array of indices
+        indices = sub_block.ravel()
         return indices
 
     def computeIndexBounds(self, thresh_xy, thresh_z, wind_shift):
@@ -892,3 +878,58 @@ class SensorMode(GaussianPuff):
     # mostly a stub- could be used to implement a more efficient version
     def coarseSpatialThreshold(self, wind_shift, local_thresh, sigma_y_i, sigma_z_i):
         return self.indices
+
+
+@njit(parallel=True)
+def gaussian_puff_inner_loop(
+    ch4,
+    indices,
+    i,
+    sigma_y_i,
+    sigma_z_i,
+    x_shift,
+    y_shift,
+    z0,
+    X_centered,
+    Y_centered,
+    Z,
+    exp_threshold_tol,
+    local_prefactor,
+):
+    one_over_sig_y = 1.0 / sigma_y_i
+    one_over_sig_z = 1.0 / sigma_z_i
+    one_over_sig_y_sq = one_over_sig_y**2
+
+    local_thresh = np.sqrt(-2 * np.log(exp_threshold_tol / (2 * local_prefactor)))
+
+    for j in prange(len(indices)):
+        idx = indices[j]
+
+        if sigma_y_i <= 0 or sigma_z_i <= 0:
+            continue
+
+        t_xy = sigma_y_i * local_thresh
+
+        if abs(X_centered[idx] - x_shift) >= t_xy:
+            continue
+        if abs(Y_centered[idx] - y_shift) >= t_xy:
+            continue
+
+        t_z = sigma_z_i * local_thresh
+        if abs(Z[idx] - z0) >= t_z:
+            continue
+
+        y_dist = Y_centered[idx] - y_shift
+        x_dist = X_centered[idx] - x_shift
+        z_minus_by_sig = (Z[idx] - z0) * one_over_sig_z
+        z_plus_by_sig = (Z[idx] + z0) * one_over_sig_z
+
+        term_3_arg = (y_dist**2 + x_dist**2) * one_over_sig_y_sq
+        term_4_a_arg = z_minus_by_sig**2
+        term_4_b_arg = z_plus_by_sig**2
+
+        term_4 = np.exp(-0.5 * (term_3_arg + term_4_a_arg)) + np.exp(
+            -0.5 * (term_3_arg + term_4_b_arg)
+        )
+
+        ch4[i, idx] += local_prefactor * term_4
