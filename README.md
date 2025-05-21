@@ -62,7 +62,7 @@ $ conda env create -f environment.yml
 Then, activate the environment with:
 
 ```shell
-$ conda activate gp
+$ conda activate pygp
 ```
 
 The module works with pip. To install, use:
