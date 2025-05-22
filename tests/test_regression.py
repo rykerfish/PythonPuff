@@ -1,4 +1,4 @@
-from FastGaussianPuff import PuffParser
+from PythonPuff import PuffParser
 import os
 import pandas as pd
 import numpy as np

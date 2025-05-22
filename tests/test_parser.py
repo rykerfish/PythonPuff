@@ -1,6 +1,6 @@
 import pytest
-from FastGaussianPuff import PuffParser as parser
-from FastGaussianPuff import SensorMode
+from PythonPuff import PuffParser as parser
+from PythonPuff import SensorMode
 import pandas as pd
 import numpy as np
 

@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 import pandas as pd
 from utils import params, grid_params, sensor_params
-from FastGaussianPuff import GridMode, SensorMode
+from PythonPuff import GridMode, SensorMode
 
 
 @pytest.mark.parametrize(

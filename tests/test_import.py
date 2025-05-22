@@ -1,4 +1,4 @@
 def test_import():
-  from FastGaussianPuff import SensorMode
-  from FastGaussianPuff import GridMode
-  from FastGaussianPuff import PuffParser
+  from PythonPuff import SensorMode
+  from PythonPuff import GridMode
+  from PythonPuff import PuffParser
