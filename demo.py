@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pylab as plt
 
 import utils
 from PythonPuff import SensorMode
@@ -83,44 +82,3 @@ for i in range(n_sources):
     df = pd.DataFrame(ch4, index=timestamps, columns=sensor_names)
     df.index.name = "timestamp"
     df.to_csv(output_dir + source_names[i] + ".csv", index=True)
-
-# t, n_sensors = np.shape(sp.ch4_obs)
-
-# fig, ax = plt.subplots(2, 4, figsize=(10, 10))
-# m = sp.ch4_obs.max()
-# fig.supxlabel("Time from emission start (minutes)")
-# fig.supylabel("Methane concentration (ppm)")
-
-# ch4_dat = pd.read_csv(dir + "ch4_1min_ADED22" + ".csv")
-# ch4_dat["time_stamp.mountain"] = pd.to_datetime(ch4_dat["time_stamp.mountain"])
-# ch4_exp = ch4_dat[
-#     (ch4_dat["time_stamp.mountain"] >= start) & (ch4_dat["time_stamp.mountain"] <= end)
-# ]
-
-# n_sensors = len(sensor_names)
-# for i in range(0, n_sensors):
-
-#     if i < 4:
-#         row = 0
-#         col = i
-#     else:
-#         row = 1
-#         col = i - 4
-
-#     times = np.arange(0, t)
-
-#     sensor_ch4 = sp.ch4_obs[:, i]
-
-#     ax[row][col].plot(times, sensor_ch4, label="Simulated", color="blue")
-#     ax[row][col].plot(
-#         times,
-#         ch4_exp[sensor_names[i]].values,
-#         label="Observed",
-#         color="red",
-#     )
-#     ax[row][col].set_ylim(-1, m + 2)
-#     ax[row][col].set_title(sensor_names[i])
-
-
-# print("CHECK FILE demo_sensors.png")
-# fig.savefig("demo_sensors.png", format="png", dpi=500, bbox_inches="tight")
