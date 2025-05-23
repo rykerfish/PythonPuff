@@ -566,30 +566,10 @@ class GaussianPuff:
     def exp(self, val):
         return math.exp(val)
 
-    def _resample_simulation(self, c_matrix, resample_dt, mode="mean"):
-        """
-        Resample the simulation results
-        Inputs:
-            c_matrix [ppm] (2D np.ndarray, shape = [N_t_sim, self.N_points]):
-                the simulation results in sim_dt resolution across the whole grid
-            dt [s] (scalar, float):
-                the target time resolution
-            mode (str):
-                - 'mean': resmple by taking average
-                - 'resample': resample by taking every dt sample
-        Outputs:
-            c_matrix_res [ppm] (4D np.array, shape = [N_t_new, self.grid_dims)]):
-                resampled simulation results
-        """
+    def _resample_simulation(self, c_matrix, resample_dt):
 
         df = pd.DataFrame(c_matrix, index=self.time_stamps_sim)
-        if mode == "mean":
-            df = df.resample(str(resample_dt) + "s").mean()
-        elif mode == "resample":
-            df = df.resample(str(resample_dt) + "s").asfreq()
-        else:
-            raise NotImplementedError(">>>>> sim to obs resampling mode")
-
+        df = df.resample(str(resample_dt) + "s").mean()
         c_matrix_res = df.to_numpy()
 
         self.n_out = np.shape(c_matrix_res)[0]
