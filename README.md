@@ -1,8 +1,5 @@
 # FastGaussianPuff
-*Production code the Fast Implementation of the Gaussian Puff Forward Atmospheric Model*
-
-[![build](https://github.com/Hammerling-Research-Group/FastGaussianPuff/actions/workflows/build.yml/badge.svg)](https://github.com/Hammerling-Research-Group/FastGaussianPuff/actions/workflows/build.yml)
-[![Check Link Rot](https://github.com/Hammerling-Research-Group/FastGaussianPuff/actions/workflows/check-link-rot.yaml/badge.svg)](https://github.com/Hammerling-Research-Group/FastGaussianPuff/actions/workflows/check-link-rot.yaml)
+This is a pure Python implementation of the [original FastGaussianPuff](https://github.com/Hammerling-Research-Group/FastGaussianPuff) that is implemented in mixed Python/C++. This library is somewhat slower than the original, but the install process is easier.
 
 This repository contains multiple different implementations of the Gaussian puff atmospheric dispersion model that simulates concentration timeseries given a geometry and emission parameters. The Gaussian puff model simulates a continuous emission as a series of discrete puffs. As long as puffs are emitted often enough and tracked finely enough (more on that later), this model can give reasonable results more quickly than solving an advection-diffusion equation.
 
@@ -25,7 +22,7 @@ Currently, you need four sets of parameters to set up a simulation.
 3. Wind data. You need timeseries for both wind speed and wind direction that are regularly spaced in time.
 4. Timestep parameters. These parameters affect accuracy of the simulation. Higher wind speeds or rapid changes in wind direction means these parameters need to be smaller to maintain accuracy. Hopefully one day we can set these automatically based on the wind data.
 
-There are descriptions for each parameter in the [class file](GaussianPuff.py) and demos for how to use the code in the `demos/` directory.
+There are descriptions for each parameter in the [class file](src/PythonPuff/GaussianPuff.py).
 
 ### Site geometry
 Currently, we care about two use cases. Each of these have smart implementations that are specialized to be fast for each scenario and require different 
@@ -65,31 +62,10 @@ $ conda env create -f environment.yml
 Then, activate the environment with:
 
 ```shell
-$ conda activate gp
+$ conda activate pygp
 ```
 
 The module works with pip. To install, use:
 ```shell
 $ pip install .
 ```
-
-Alternatively, you can install manually using CMake. You can compile and install everything with:
-
-```shell
-$ mkdir build && cd build
-$ cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..
-$ make all install
-```
-It is advisable to install the library in the conda environment so that the python bindings are available. The environment variable $CONDA_PREFIX is set to the root of the conda environment.
-
-## Danger zone
-This section contains details on special parameters that may cause erroneous output and have specific use-cases. When in doubt, re-run the model with default parameters and compare.
-
-`skip_low_wind` (bool), `low_wind_cutoff` (float, [m/s])
-- When true, skip_low_wind will cause the simulation to skip emitting puffs when the wind speed is below the low_wind_cutoff. This was added for convenience since the model is unreliable in low wind speeds (< 0.5m/s) and doesn't run if there is a wind speed of 0 m/s. 
-
-`exp_thresh_tolerance` (float. [ppm])
-- The tolerance for the thresholding algorithm. The model will skip evaluation of any cell that will produce a result less than this. Note that this is not one-to-one with the smallest concentration you'll see in the output due to how output data is resampled in time. As such, this should be set conservatively. Default: 1e-7
-
-`unsafe` (bool)
-- Turning this to true enables unsafe math operations that approximate evaluation of expensive functions and uses a tighter threshold. Expect to see between a 1.5-2x speed up, but the output may vary from what is expected. When in doubt, rerun the model with this off and compare.
