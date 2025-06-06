@@ -1,0 +1,10 @@
+# create the environment from this file with `conda env create -f conda_env.yml`
+name: pygp
+channels:
+  - conda-forge
+dependencies:
+  - pandas
+  - numpy
+  - numba
+  - tbb>=2021.6
+  - matplotlib
